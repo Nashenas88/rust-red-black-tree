@@ -1,6 +1,8 @@
 #![feature(plugin)]
 #![plugin(stainless)]
 
+// Note: the algorithm for this tree is based off the algorithm in
+// https://en.wikipedia.org/wiki/Red%E2%80%93black_tree
 
 use std::mem;
 
