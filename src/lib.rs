@@ -5,8 +5,9 @@
 // https://en.wikipedia.org/wiki/Red%E2%80%93black_tree
 
 use std::mem;
+use std::fmt::{self, Debug};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub enum Color {
     Red,
     Black,
@@ -28,6 +29,17 @@ impl Color {
     }
 }
 
+impl Debug for Color {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let string = match *self {
+            Color::Red => "R",
+            Color::Black => "B",
+        };
+        
+        write!(f, "{}", string)
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 enum Dir {
     Left,
@@ -43,15 +55,14 @@ impl Dir {
     }
 }
 
-#[derive(Debug)]
-struct Node<T> where T: PartialOrd {
+pub struct Node<T> where T: PartialOrd {
     color: Color,
     value: T,
     left: Link<T>,
     right: Link<T>,
 }
 
-type Link<T> = Option<Box<Node<T>>>;
+pub type Link<T> = Option<Box<Node<T>>>;
 
 impl<T> Node<T> where T: PartialOrd {
     fn new(value: T) -> Node<T> {
@@ -61,6 +72,12 @@ impl<T> Node<T> where T: PartialOrd {
             left: None,
             right: None,
         }
+    }
+}
+
+impl<T> Debug for Node<T> where T: PartialOrd + Debug {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}-{:?}", self.color, self.value)
     }
 }
 
@@ -419,11 +436,10 @@ impl<T> Node<T> where T: PartialOrd {
         }
         
         grandparent.set_color(Color::Red);
-        let parent = grandparent.follow_mut(p_dir);
-        parent.set_color(Color::Black);
+        grandparent.follow_mut(p_dir).set_color(Color::Black);
         match n_dir {
-            Dir::Left => Self::rotate_right(parent),
-            Dir::Right => Self::rotate_left(parent),
+            Dir::Left => Self::rotate_right(grandparent),
+            Dir::Right => Self::rotate_left(grandparent),
         }
     }
     
@@ -632,7 +648,7 @@ macro_rules! rb_tree [
         let mut _tree = RedBlackTree::new();
         $(_tree.insert($item);)*
         _tree
-    })
+    });
 ];
 
 
@@ -642,33 +658,131 @@ extern crate expectest;
 
 #[cfg(test)]
 mod test {
-    pub use expectest::prelude::{be_some, be_none, be_equal_to};
-    use NodeHelper;
-    use Link;
+    pub use expectest::prelude::*;
+    use super::NodeHelper;
     pub use super::*;
+    use std::fmt::Debug;
     
-    // node based iterator for verifying structure of tree during testing
-    struct RedBlackNodeIterator<'a, T> where T: PartialOrd + 'a {
-        stack: Vec<&'a Link<T>>,
-        current: Option<&'a Link<T>>,
-    }
+    // print before each insert so we can see how the tree
+    // is being constructed
+    macro_rules! rb_tree_print [
+        ($($item:expr),*) => ({
+            let mut _tree = RedBlackTree::new();
+            $(
+                println!("--\n");
+                print_tree(&_tree);
+                _tree.insert($item);
+            )*
+            _tree
+        })
+    ];
     
-    impl<'a, T> RedBlackNodeIterator<'a, T> where T: PartialOrd + 'a {
-        fn new(tree: &RedBlackTree<T>) -> RedBlackNodeIterator<T> {
-            RedBlackNodeIterator {
-                stack: vec![],
-                current: Some(&tree.root),
+    impl PartialEq for Color {
+        fn eq(&self, other: &Self) -> bool {
+            match *self {
+                Color::Red => match *other {
+                    Color::Red => true,
+                    _ => false,
+                },
+                Color::Black => match *other {
+                    Color::Black => true,
+                    _ => false,
+                }
             }
         }
     }
     
-    impl<'a, T> Iterator for RedBlackNodeIterator<'a, T> where T: PartialOrd {
-        type Item = &'a Link<T>;
+    impl<T: PartialOrd> PartialEq for Node<T> {
+        fn eq(&self, other: &Self) -> bool {
+            self.color == other.color
+                && self.value == other.value
+        }
+    }
+    
+    pub fn node<T: PartialOrd>(color: Color, value: T) -> Node<T> {
+        Node::<T> {
+            color: color,
+            value: value,
+            left: None,
+            right: None,
+        }
+    }
+    
+    // used to verify Red-Black Tree internal structures during tests
+    macro_rules! verify {
+        (@as_expr $e:expr) => {$e};
         
-        // traverses depth first
-        fn next(&mut self) -> Option<&'a Link<T>> {
-            // todo
-            unimplemented!()
+        (@match_node $node:expr => None) => {{
+            expect($node.as_ref()).to(be_none());
+        }};
+        (@match_node $node:expr => r-$v:tt) => {{
+            expect($node.as_ref().unwrap())
+                .to(be_equal_to(&Box::new(
+                    node(Color::Red, verify!(@as_expr $v)))));
+        }};
+        (@match_node $node:expr => b-$v:tt) => {{
+            expect($node.as_ref().unwrap())
+                .to(be_equal_to(&Box::new(
+                    node(Color::Black, verify!(@as_expr $v)))));
+        }};
+        
+        (@match_branches $node:expr => None) => {
+            verify!(@match_node $node => None);
+        };
+        (@match_branches $node:expr => $c:tt-$v:tt) => {
+            verify!(@match_node $node => $c-$v);
+            verify!(@match_node $node.left() => None);
+            verify!(@match_node $node.right() => None);
+        };
+        (@match_branches $node:expr => $c:tt-$v:tt
+                { $($left:tt)+ },
+                { $($right:tt)+ }) => {
+            verify!(@match_node $node => $c-$v);
+            verify!(@match_branches $node.left() => $($left)+);
+            verify!(@match_branches $node.right() => $($right)+);
+        };
+        
+        ($tree:expr => $($nodes:tt)+) => {
+            verify!(@match_branches $tree.root => $($nodes)+);
+        };
+    }
+    
+    // prints tree side-ways with the root on the left and the right-most node on top
+    #[allow(dead_code)]
+    pub fn print_tree<T>(tree: &RedBlackTree<T>)
+    where T: PartialOrd + Debug {
+        let mut link = &tree.root;
+        if link.is_none() {
+            println!("None");
+            return;
+        }
+        
+        let mut right = link.right();
+        while right.is_some() {
+            link = right;
+            right = link.right();
+        }
+        
+        let link_str = format!("{:?}", link.as_ref().unwrap());
+        let width = link_str.len() + 1;
+        
+        print_link(0, width, &tree.root);
+    }
+    
+    fn print_link<T>(depth: usize, width: usize, link: &Link<T>)
+    where T: PartialOrd + Debug {
+        let right = link.right();
+        let left = link.left();
+        
+        if right.is_some() {
+            print_link(depth + 1, width, right);
+        }
+        
+        let link_str = format!("{:?}", link.as_ref().unwrap());
+        println!("{0:>1$}", link_str, (depth + 1) * width);
+        
+        if left.is_some() {
+            print_link(depth + 1, width, left);
         }
     }
     
@@ -688,7 +802,71 @@ mod test {
                 
                 expect!(tree.root.value()).to(be_equal_to(&1));
                 expect!(tree.count).to(be_equal_to(1));
-                expect!(tree.root.color().is_black()).to(be_equal_to(true));
+                expect!(tree.root.color().is_black()).to(be_true());
+            }
+            
+            it "correctly rotates the tree when it becomes unbalanced on the third insert" {
+                // right heavy
+                let tree = rb_tree![1, 2, 3];
+                verify!{ tree =>
+                    b-2
+                        { r-1 },
+                        { r-3 }
+                };
+                
+                // left heavy
+                let tree = rb_tree![4, 3, 2];
+                verify!{ tree =>
+                    b-3
+                        { r-2 },
+                        { r-4 }
+                };
+            }
+            
+            it "fixes uncles when an insert leaves an imbalance in the number of black nodes" {
+                // right-right
+                let tree = rb_tree![1, 2, 3, 4];
+                verify!{ tree =>
+                    b-2
+                        { b-1 },
+                        { b-3
+                            { None },
+                            { r-4 }
+                        }
+                };
+                
+                // left-left
+                let tree = rb_tree![4, 3, 2, 1];
+                verify!{ tree =>
+                    b-3
+                        { b-2
+                            { r-1 },
+                            { None }
+                        },
+                        { b-4 }
+                };
+                
+                // right-left
+                let tree = rb_tree![1, 2, 4, 3];
+                verify!{ tree =>
+                    b-2
+                        { b-1 },
+                        { b-4
+                            { r-3 },
+                            { None }
+                        }
+                };
+                
+                // left-right
+                let tree = rb_tree![4, 3, 1, 2];
+                verify!{ tree =>
+                    b-3
+                        { b-1
+                            { None },
+                            { r-2 }
+                        },
+                        { b-4 }
+                };
             }
         }
         
