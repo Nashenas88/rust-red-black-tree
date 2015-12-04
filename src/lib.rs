@@ -358,7 +358,10 @@ impl<T> Node<T> where T: PartialOrd {
                 let mut node = follow_mut!(grandparent, p_dir, n_dir);
                 *node = Some(Box::new(Node::new(value)));
             }
-            Self::insert_2_g(grandparent, p_dir, n_dir)
+            match Self::insert_2_g(grandparent, p_dir, n_dir) {
+                None | Some(0) => None,
+                Some(rest) => Some(rest - 1),
+            }
         } else {
             let dir = get_dir(value < *follow!(grandparent, p_dir, n_dir).value());
             match Self::insert_g(value, grandparent.follow_mut(p_dir), n_dir, dir) {
@@ -376,8 +379,10 @@ impl<T> Node<T> where T: PartialOrd {
             None
         } else {
             let dir = get_dir(value < *parent.follow(n_dir).value());
-            Self::insert_g(value, parent, n_dir, dir)
-                .map(|rest| rest - 1)
+            match Self::insert_g(value, parent, n_dir, dir) {
+                None | Some(0) => None,
+                Some(rest) => Some(rest - 1),
+            }
         }
     }
     
@@ -416,7 +421,7 @@ impl<T> Node<T> where T: PartialOrd {
 
         if uncle_red {
             grandparent.follow_mut(p_dir).set_color(Color::Black);
-            grandparent.set_color(Color::Black);
+            grandparent.set_color(Color::Red);
             Some(2)
         } else {
             Self::insert_4_g(grandparent, p_dir, n_dir);
@@ -475,7 +480,7 @@ impl<T> Node<T> where T: PartialOrd {
         }
         
         if *node.value() == *value {
-            Some(Self::delete_one_child(node).0)
+            Some(Self::find_child_to_delete(node).0)
         } else {
             let dir = get_dir(*node.value() < *value);
             Self::remove_p(value, node, dir).0
@@ -488,7 +493,7 @@ impl<T> Node<T> where T: PartialOrd {
         }
         
         if *parent.follow(n_dir).value() == *value {
-            let (value, should_fix_parent) = Self::delete_one_child(parent.follow_mut(n_dir));
+            let (value, should_fix_parent) = Self::find_child_to_delete(parent.follow_mut(n_dir));
             (Some(value), should_fix_parent)
         } else {
             let dir = get_dir(*parent.follow(n_dir).value() < *value);
@@ -499,6 +504,42 @@ impl<T> Node<T> where T: PartialOrd {
             
             (ret, should_fix_parent)
         }
+    }
+    
+    fn find_child_to_delete(node: &mut Link<T>) -> (T, bool) {
+        if node.left().is_none() || node.right().is_none() {
+            return Self::delete_one_child(node);
+        }
+        
+        let (mut value, mut should_fix_parent) = {
+            let left = node.left_mut();
+            Self::find_largest_child_to_delete(left)
+        };
+        
+        mem::swap(&mut value, node.value_mut());
+        
+        if should_fix_parent {
+            should_fix_parent = Self::delete_case2(node, Dir::Left);
+        }
+        
+        (value, should_fix_parent)
+    }
+    
+    fn find_largest_child_to_delete(node: &mut Link<T>) -> (T, bool) {
+        if node.right().is_none() {
+            return Self::delete_one_child(node);
+        }
+        
+        let (value, mut should_fix_parent) = {
+            let right = node.right_mut();
+            Self::find_largest_child_to_delete(right)
+        };
+        
+        if should_fix_parent {
+            should_fix_parent = Self::delete_case2(node, Dir::Right);
+        }
+        
+        (value, should_fix_parent)
     }
     
     fn delete_one_child(node: &mut Link<T>) -> (T, bool) {
@@ -713,15 +754,15 @@ mod test {
         (@as_expr $e:expr) => {$e};
         
         (@match_node $node:expr => None) => {{
-            expect($node.as_ref()).to(be_none());
+            expect!($node.as_ref()).to(be_none());
         }};
         (@match_node $node:expr => r-$v:tt) => {{
-            expect($node.as_ref().unwrap())
+            expect!($node.as_ref().unwrap())
                 .to(be_equal_to(&Box::new(
                     node(Color::Red, verify!(@as_expr $v)))));
         }};
         (@match_node $node:expr => b-$v:tt) => {{
-            expect($node.as_ref().unwrap())
+            expect!($node.as_ref().unwrap())
                 .to(be_equal_to(&Box::new(
                     node(Color::Black, verify!(@as_expr $v)))));
         }};
@@ -757,6 +798,10 @@ mod test {
             return;
         }
         
+        // there's padding at the beginning of the original output
+        // so we start on a new line to fix alignment
+        println!("\n");
+        
         let mut right = link.right();
         while right.is_some() {
             link = right;
@@ -766,23 +811,23 @@ mod test {
         let link_str = format!("{:?}", link.as_ref().unwrap());
         let width = link_str.len() + 1;
         
-        print_link(0, width, &tree.root);
+        print_link(0, width, "", &tree.root);
     }
     
-    fn print_link<T>(depth: usize, width: usize, link: &Link<T>)
+    fn print_link<T>(depth: usize, width: usize, link_path: &str, link: &Link<T>)
     where T: PartialOrd + Debug {
         let right = link.right();
         let left = link.left();
         
         if right.is_some() {
-            print_link(depth + 1, width, right);
+            print_link(depth + 1, width, "/", right);
         }
         
-        let link_str = format!("{:?}", link.as_ref().unwrap());
+        let link_str = format!("{0}{1:?}", link_path, link.as_ref().unwrap());
         println!("{0:>1$}", link_str, (depth + 1) * width);
         
         if left.is_some() {
-            print_link(depth + 1, width, left);
+            print_link(depth + 1, width, "\\", left);
         }
     }
     
@@ -868,6 +913,33 @@ mod test {
                         { b-4 }
                 };
             }
+            
+            it "makes grandparents red when parents and uncles were red" {
+                let mut tree = rb_tree_print![1, 2, 3, 4, 5, 6];
+                verify!{ tree =>
+                    b-2
+                        { b-1 },
+                        { r-4
+                            { b-3 },
+                            { b-5
+                                { None },
+                                { r-6 }
+                            }
+                        }
+                };
+                tree.insert(7);
+                verify!{ tree =>
+                    b-2
+                        { b-1 },
+                        { r-4
+                            { b-3 },
+                            { b-6
+                                { r-5 },
+                                { r-7 }
+                            }
+                        }
+                };
+            }
         }
         
         describe! remove {
@@ -881,10 +953,26 @@ mod test {
                 let mut tree = rb_tree![1];
                 let value = 1;
                 
-                expect!(tree.count).to(be_equal_to(1));
+                verify!{tree => b-1};
                 expect!(tree.remove(&value)).to(be_some().value(1));
-                expect!(tree.count).to(be_equal_to(0));
-                expect!(tree.root).to(be_none());
+                verify!{tree => None};
+            }
+            
+            it "can remove a node that has two children" {
+                let mut tree = rb_tree![1, 2, 3];
+                verify!{tree =>
+                    b-2
+                        { r-1 },
+                        { r-3 }
+                };
+                
+                let value = 2;
+                expect!(tree.remove(&value)).to(be_some().value(2));
+                verify!{tree =>
+                    b-1
+                        { None },
+                        { r-3 }
+                };
             }
         }
         
