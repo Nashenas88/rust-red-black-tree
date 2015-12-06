@@ -4,82 +4,17 @@
 // Note: the algorithm for this tree is based off the algorithm in
 // https://en.wikipedia.org/wiki/Red%E2%80%93black_tree
 
+#[macro_use]
+#[cfg(not(test))]
+mod node;
+
+#[macro_use]
+#[cfg(test)]
+pub mod node;
+
+use node::{Node, Link, Color, Dir, NodeHelper, Follow};
+
 use std::mem;
-use std::fmt::{self, Debug};
-
-#[derive(Copy, Clone)]
-pub enum Color {
-    Red,
-    Black,
-}
-
-impl Color {
-    fn is_red(self) -> bool {
-        match self {
-            Color::Red => true,
-            Color::Black => false,
-        }
-    }
-    
-    fn is_black(self) -> bool {
-        match self {
-            Color::Red => false,
-            Color::Black => true,
-        }
-    }
-}
-
-impl Debug for Color {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let string = match *self {
-            Color::Red => "R",
-            Color::Black => "B",
-        };
-        
-        write!(f, "{}", string)
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-enum Dir {
-    Left,
-    Right
-}
-
-impl Dir {
-    fn opposite(self) -> Self {
-        match self {
-            Dir::Left => Dir::Right,
-            Dir::Right => Dir::Left,
-        }
-    }
-}
-
-pub struct Node<T> where T: PartialOrd {
-    color: Color,
-    value: T,
-    left: Link<T>,
-    right: Link<T>,
-}
-
-pub type Link<T> = Option<Box<Node<T>>>;
-
-impl<T> Node<T> where T: PartialOrd {
-    fn new(value: T) -> Node<T> {
-        Node::<T> {
-            value: value,
-            color: Color::Red,
-            left: None,
-            right: None,
-        }
-    }
-}
-
-impl<T> Debug for Node<T> where T: PartialOrd + Debug {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}-{:?}", self.color, self.value)
-    }
-}
 
 pub struct RedBlackTree<T> where T: PartialOrd {
     root: Link<T>,
@@ -171,182 +106,6 @@ impl<'a, T> Iterator for RedBlackIterator<'a, T> where T: PartialOrd {
     }
 }
 
-trait NodeHelper<T> where T: PartialOrd {
-    fn color(&self) -> &Color;
-    fn set_color(&mut self, color: Color);
-    
-    fn left(&self) -> &Link<T>;
-    fn left_mut(&mut self) -> &mut Link<T>;
-    fn set_left(&mut self, left: Link<T>);
-    
-    fn right(&self) -> &Link<T>;
-    fn right_mut(&mut self) -> &mut Link<T>;
-    fn set_right(&mut self, right: Link<T>);
-    
-    fn value(&self) -> &T;
-    fn value_mut(&mut self) -> &mut T;
-    fn set_value(&mut self, value: T);
-    fn take_value(self) -> T;
-    
-    fn is_black(&self) -> bool;
-    fn is_red(&self) -> bool;
-}
-
-impl<T> NodeHelper<T> for Link<T> where T: PartialOrd {
-    fn color(&self) -> &Color {
-        &self.as_ref().unwrap().color
-    }
-    fn set_color(&mut self, color: Color) {
-        self.as_mut().map(|n| n.color = color);
-    }
-    
-    fn left(&self) -> &Link<T> {
-        &self.as_ref().unwrap().left
-    }
-    fn left_mut(&mut self) -> &mut Link<T> {
-        &mut self.as_mut().unwrap().left
-    }
-    fn set_left(&mut self, left: Link<T>) {
-        self.as_mut().map(|n| n.left = left);
-    }
-    
-    fn right(&self) -> &Link<T> {
-        &self.as_ref().unwrap().right
-    }
-    fn right_mut(&mut self) -> &mut Link<T> {
-        &mut self.as_mut().unwrap().right
-    }
-    fn set_right(&mut self, right: Link<T>) {
-        self.as_mut().map(|n| n.right = right);
-    }
-    
-    fn value(&self) -> &T {
-        &self.as_ref().unwrap().value
-    }
-    fn value_mut(&mut self) -> &mut T {
-        &mut self.as_mut().unwrap().value
-    }
-    fn set_value(&mut self, value: T) {
-        self.as_mut().map(|n| n.value = value);
-    }
-    fn take_value(self) -> T {
-        self.unwrap().value
-    }
-    
-    fn is_black(&self) -> bool {
-        self.as_ref().map_or(true, |n| n.color.is_black())
-    }
-    fn is_red(&self) -> bool {
-        self.as_ref().map_or(false, |n| n.color.is_red())
-    }
-}
-
-impl<'a, T> NodeHelper<T> for Option<&'a mut Link<T>> where T: PartialOrd {
-    fn color(&self) -> &Color {
-        self.as_ref().unwrap().color()
-    }
-    fn set_color(&mut self, color: Color) {
-        self.as_mut().map(|n| n.set_color(color));
-    }
-    
-    fn left(&self) -> &Link<T> {
-        self.as_ref().unwrap().left()
-    }
-    fn left_mut(&mut self) -> &mut Link<T> {
-        (**self.as_mut().unwrap()).left_mut()
-    }
-    fn set_left(&mut self, left: Link<T>) {
-        self.as_mut().map(|n| n.set_left(left));
-    }
-    
-    fn right(&self) -> &Link<T> {
-        self.as_ref().unwrap().right()
-    }
-    fn right_mut(&mut self) -> &mut Link<T> {
-        (**self.as_mut().unwrap()).right_mut()
-    }
-    fn set_right(&mut self, right: Link<T>) {
-        self.as_mut().map(|n| n.set_right(right));
-    }
-    
-    fn value(&self) -> &T {
-        self.as_ref().unwrap().value()
-    }
-    fn value_mut(&mut self) -> &mut T {
-        self.as_mut().unwrap().value_mut()
-    }
-    fn set_value(&mut self, value: T) {
-        self.as_mut().map(|n| n.set_value(value));
-    }
-    fn take_value(self) -> T {
-        unimplemented!()
-    }
-    
-    fn is_black(&self) -> bool {
-        self.as_ref().unwrap().is_black()
-    }
-    fn is_red(&self) -> bool {
-        self.as_ref().unwrap().is_red()
-    }
-}
-
-trait Follow<T> where T: PartialOrd {
-    fn follow(&self, direction: Dir) -> &Link<T>;
-    fn follow_mut(&mut self, direction: Dir) -> &mut Link<T>;
-}
-
-impl<T> Follow<T> for Node<T> where T: PartialOrd {
-    fn follow(&self, direction: Dir) -> &Link<T> {
-        match direction {
-            Dir::Left => &self.left,
-            Dir::Right => &self.right,
-        }
-    }
-    fn follow_mut(&mut self, direction: Dir) -> &mut Link<T> {
-        match direction {
-            Dir::Left => &mut self.left,
-            Dir::Right => &mut self.right,
-        }
-    }
-}
-
-impl<T> Follow<T> for Link<T> where T: PartialOrd {
-    fn follow(&self, direction: Dir) -> &Link<T> {
-        self.as_ref().unwrap().follow(direction)
-    }
-    fn follow_mut(&mut self, direction: Dir) -> &mut Link<T> {
-        self.as_mut().unwrap().follow_mut(direction)
-    }
-}
-
-impl<'a, T> Follow<T> for Option<&'a mut Link<T>> where T: PartialOrd {
-    fn follow(&self, direction: Dir) -> &Link<T> {
-        self.as_ref().unwrap().follow(direction)
-    }
-    fn follow_mut(&mut self, direction: Dir) -> &mut Link<T> {
-        self.as_mut().unwrap().follow_mut(direction)
-    }
-}
-
-// variadic versions of follow
-macro_rules! follow {
-    ($node:expr, $dir:ident) => {
-        $node.follow($dir)
-    };
-    ($node:expr, $dir:ident, $($dirs:ident),+) => {
-        follow!($node.follow($dir), $($dirs),+)
-    };
-}
-
-macro_rules! follow_mut {
-    ($node:expr, $dir:ident) => {
-        $node.follow_mut($dir)
-    };
-    ($node:expr, $dir:ident, $($dirs:ident),+) => {
-        follow_mut!($node.follow_mut($dir), $($dirs),+)
-    };
-}
-
 fn get_dir(is_less: bool) -> Dir {
     if is_less { Dir::Left } else { Dir::Right }
 }
@@ -410,14 +169,19 @@ impl<T> Node<T> where T: PartialOrd {
     }
     
     fn insert_3_g(grandparent: &mut Link<T>, p_dir: Dir, n_dir: Dir) -> Option<usize> {
-        let uncle_red = grandparent.follow_mut(p_dir.opposite()).as_mut()
-            .map_or(false, |uncle| match uncle.color {
-                Color::Black => false,
-                Color::Red => {
-                    uncle.color = Color::Black;
-                    true
+        let uncle_red = {
+            let uncle = grandparent.follow_mut(p_dir.opposite());
+            match *uncle {
+                None => false,
+                _ => match *uncle.color() {
+                    Color::Black => false,
+                    Color::Red => {
+                        uncle.set_color(Color::Black);
+                        true
+                    },
                 },
-            });
+            }
+        };
 
         if uncle_red {
             grandparent.follow_mut(p_dir).set_color(Color::Black);
@@ -698,11 +462,12 @@ macro_rules! rb_tree [
 extern crate expectest;
 
 #[cfg(test)]
-mod test {
+mod unit_tests {
     pub use expectest::prelude::*;
-    use super::NodeHelper;
-    pub use super::*;
+    
     use std::fmt::Debug;
+    pub use super::*;
+    pub use super::node::*;
     
     // print before each insert so we can see how the tree
     // is being constructed
@@ -733,102 +498,158 @@ mod test {
         }
     }
     
-    impl<T: PartialOrd> PartialEq for Node<T> {
-        fn eq(&self, other: &Self) -> bool {
-            self.color == other.color
-                && self.value == other.value
-        }
-    }
-    
-    pub fn node<T: PartialOrd>(color: Color, value: T) -> Node<T> {
-        Node::<T> {
-            color: color,
-            value: value,
-            left: None,
-            right: None,
-        }
-    }
-    
-    // used to verify Red-Black Tree internal structures during tests
+    // Allows you to verify a tree's structure
+    // by using the same format as the output
+    // of the print_tree function:
+    // verify!{ tree =>
+    //         < B.2 >
+    //     B.1   < R.4 >
+    //         B.3   < B.6 >
+    //             R.5     R.7
+    // };
     macro_rules! verify {
-        (@as_expr $e:expr) => {$e};
+        // helper rule
+        (@expr $e:expr) => {$e};
         
-        (@match_node $node:expr => None) => {{
+        (@color R) => { Color::Red };
+        (@color B) => { Color::Black };
+        
+        (@expect $node:expr => $c:tt.$v:tt) => {{
+            expect!($node.as_ref()).to(be_some()
+                .value(&Box::new(node(
+                    verify!(@color $c),
+                    verify!(@expr $v)))));
+        }};
+        (@expect $node:expr => None) => {{
             expect!($node.as_ref()).to(be_none());
         }};
-        (@match_node $node:expr => r-$v:tt) => {{
-            expect!($node.as_ref().unwrap())
-                .to(be_equal_to(&Box::new(
-                    node(Color::Red, verify!(@as_expr $v)))));
-        }};
-        (@match_node $node:expr => b-$v:tt) => {{
-            expect!($node.as_ref().unwrap())
-                .to(be_equal_to(&Box::new(
-                    node(Color::Black, verify!(@as_expr $v)))));
-        }};
         
-        (@match_branches $node:expr => None) => {
-            verify!(@match_node $node => None);
+        // edge case where root is None
+        (@match_node [$node:expr] => None) => {
+            verify!(@expect $node => None);
         };
-        (@match_branches $node:expr => $c:tt-$v:tt) => {
-            verify!(@match_node $node => $c-$v);
-            verify!(@match_node $node.left() => None);
-            verify!(@match_node $node.right() => None);
-        };
-        (@match_branches $node:expr => $c:tt-$v:tt
-                { $($left:tt)+ },
-                { $($right:tt)+ }) => {
-            verify!(@match_node $node => $c-$v);
-            verify!(@match_branches $node.left() => $($left)+);
-            verify!(@match_branches $node.right() => $($right)+);
-        };
-        
+        // two children
+        (@match_node [$node:expr, $($stack:expr),+] => <$c:tt.$v:tt> $($nodes:tt)+) => {{
+            verify!(@expect $node => $c.$v);
+            verify!(@match_node [$($stack),+, $node.left(), $node.right()] => $($nodes)+);
+        }};
+        // two children and one stack item
+        (@match_node [$node:expr] => <$c:tt.$v:tt> $($nodes:tt)+) => {{
+            verify!(@expect $node => $c.$v);
+            verify!(@match_node [$node.left(), $node.right()] => $($nodes)+);
+        }};
+        // only right child
+        (@match_node [$node:expr, $($stack:expr),+] => $c:tt.$v:tt> $($nodes:tt)+) => {{
+            verify!(@expect $node => $c.$v);
+            verify!(@expect $node.left() => None);
+            verify!(@match_node [$($stack),+, $node.right()] => $($nodes)+);
+        }};
+        // only right child and one stack item
+        (@match_node [$node:expr] => $c:tt.$v:tt> $($nodes:tt)+) => {{
+            verify!(@expect $node => $c.$v);
+            verify!(@expect $node.left() => None);
+            verify!(@match_node [$node.right()] => $($nodes)+);
+        }};
+        // only left child
+        (@match_node [$node:expr, $($stack:expr),+] => <$c:tt.$v:tt $($nodes:tt)+) => {{
+            verify!(@expect $node => $c.$v);
+            verify!(@expect $node.right() => None);
+            verify!(@match_node [$($stack),+, $node.left()] => $($nodes)+);
+        }};
+        // only left child and one stack item
+        (@match_node [$node:expr] => <$c:tt.$v:tt $($nodes:tt)+) => {{
+            verify!(@expect $node => $c.$v);
+            verify!(@expect $node.right() => None);
+            verify!(@match_node [$node.left()] => $($nodes)+);
+        }};
+        // no children
+        (@match_node [$node:expr, $($stack:expr),+] => $c:tt.$v:tt $($nodes:tt)+) => {{
+            verify!(@expect $node => $c.$v);
+            verify!(@expect $node.right() => None);
+            verify!(@expect $node.left() => None);
+            verify!(@match_node [$($stack),+] => $($nodes)+);
+        }};
+        // no children and one stack item
+        (@match_node [$node:expr] => $c:tt.$v:tt) => {{
+            verify!(@expect $node => $c.$v);
+            verify!(@expect $node.left() => None);
+            verify!(@expect $node.right() => None);
+        }};
+    
+        // initial macro call
         ($tree:expr => $($nodes:tt)+) => {
-            verify!(@match_branches $tree.root => $($nodes)+);
+            verify!(@match_node [$tree.root] => $($nodes)+);
         };
     }
     
-    // prints tree side-ways with the root on the left and the right-most node on top
+    // Will print out a tree like the following:
+    //   <B.2>
+    // B.1     <R.4>
+    //       B.3   B.5>
+    //                R.6
     #[allow(dead_code)]
-    pub fn print_tree<T>(tree: &RedBlackTree<T>)
-    where T: PartialOrd + Debug {
-        let mut link = &tree.root;
+    pub fn print_tree<T: PartialOrd + Debug> (tree: &RedBlackTree<T>) {
+        let link = &tree.root;
         if link.is_none() {
             println!("None");
             return;
         }
         
-        // there's padding at the beginning of the original output
-        // so we start on a new line to fix alignment
-        println!("\n");
-        
-        let mut right = link.right();
-        while right.is_some() {
-            link = right;
-            right = link.right();
+        let mut print_queue = vec![(0, link)];
+        while !print_queue.is_empty() {
+            let mut new_print_queue = vec![];
+            let mut printed_offset = 0;
+            for (link_offset, link) in print_queue {
+                printed_offset += print_link(
+                    link,
+                    link_offset,
+                    link_offset - printed_offset,
+                    &mut new_print_queue);
+            }
+            
+            print_queue = new_print_queue;
+            println!("\n");
         }
-        
-        let link_str = format!("{:?}", link.as_ref().unwrap());
-        let width = link_str.len() + 1;
-        
-        print_link(0, width, "", &tree.root);
     }
     
-    fn print_link<T>(depth: usize, width: usize, link_path: &str, link: &Link<T>)
+    fn tree_width<T: PartialOrd + Debug>(link: &Link<T>) -> usize {
+        match *link {
+            None => 0,
+            _ => tree_width(link.left())
+                + link_str(link).len()
+                + tree_width(link.right())
+        }
+    }
+    
+    fn link_str<T: PartialOrd + Debug> (link: &Link<T>) -> String {
+        format!("{:?}", link.as_ref().unwrap())
+    }
+    
+    fn print_link<'a, 'b, T>(link: &'a Link<T>, offset: usize, printed_offset: usize, print_queue: &'b mut Vec<(usize, &'a Link<T>)>) -> usize
     where T: PartialOrd + Debug {
         let right = link.right();
         let left = link.left();
         
-        if right.is_some() {
-            print_link(depth + 1, width, "/", right);
-        }
-        
-        let link_str = format!("{0}{1:?}", link_path, link.as_ref().unwrap());
-        println!("{0:>1$}", link_str, (depth + 1) * width);
-        
         if left.is_some() {
-            print_link(depth + 1, width, "\\", left);
+            print_queue.push((offset, left));
         }
+        
+        let link_str = link_str(link);
+        let link_str_len = link_str.len();
+        let link_offset = tree_width(left) + link_str_len;
+        if right.is_some() {
+            print_queue.push((offset + link_offset, right));
+        }
+        let link_with_arrows = format!("{}{}{}",
+            left.as_ref().map_or("", |_| "<"),
+            link_str,
+            right.as_ref().map_or("", |_| ">")
+        );
+        let right_offset = right.as_ref().map_or(0, |_| 1);
+        let arrow_offset = left.as_ref().map_or(0, |_| 1) + right_offset;
+        
+        print!("{0:>1$}", link_with_arrows, link_offset + printed_offset + right_offset);
+        link_offset + offset + arrow_offset
     }
     
     describe! the_red_black_tree {
@@ -854,17 +675,15 @@ mod test {
                 // right heavy
                 let tree = rb_tree![1, 2, 3];
                 verify!{ tree =>
-                    b-2
-                        { r-1 },
-                        { r-3 }
+                      < B.2 >
+                    R.1     R.3
                 };
                 
                 // left heavy
                 let tree = rb_tree![4, 3, 2];
                 verify!{ tree =>
-                    b-3
-                        { r-2 },
-                        { r-4 }
+                      < B.3 >
+                    R.2     R.4
                 };
             }
             
@@ -872,72 +691,51 @@ mod test {
                 // right-right
                 let tree = rb_tree![1, 2, 3, 4];
                 verify!{ tree =>
-                    b-2
-                        { b-1 },
-                        { b-3
-                            { None },
-                            { r-4 }
-                        }
+                      < B.2 >
+                    B.1     B.3 >
+                                R.4
                 };
                 
                 // left-left
                 let tree = rb_tree![4, 3, 2, 1];
                 verify!{ tree =>
-                    b-3
-                        { b-2
-                            { r-1 },
-                            { None }
-                        },
-                        { b-4 }
+                          < B.3 >
+                      < B.2     B.4
+                    R.1
                 };
                 
                 // right-left
                 let tree = rb_tree![1, 2, 4, 3];
                 verify!{ tree =>
-                    b-2
-                        { b-1 },
-                        { b-4
-                            { r-3 },
-                            { None }
-                        }
+                      < B.2 >
+                    B.1   < B.4
+                        R.3
                 };
                 
                 // left-right
                 let tree = rb_tree![4, 3, 1, 2];
                 verify!{ tree =>
-                    b-3
-                        { b-1
-                            { None },
-                            { r-2 }
-                        },
-                        { b-4 }
+                      < B.3 >
+                    B.1 >   B.4
+                        R.2
                 };
             }
             
             it "makes grandparents red when parents and uncles were red" {
                 let mut tree = rb_tree_print![1, 2, 3, 4, 5, 6];
                 verify!{ tree =>
-                    b-2
-                        { b-1 },
-                        { r-4
-                            { b-3 },
-                            { b-5
-                                { None },
-                                { r-6 }
-                            }
-                        }
+                      < B.2 >
+                    B.1   < R.4 >
+                        B.3     B.5 >
+                                    R.6
                 };
+                print_tree(&tree);
                 tree.insert(7);
                 verify!{ tree =>
-                    b-2
-                        { b-1 },
-                        { r-4
-                            { b-3 },
-                            { b-6
-                                { r-5 },
-                                { r-7 }
-                            }
-                        }
+                      < B.2 >
+                    B.1   < R.4 >
+                        B.3   < B.6 >
+                            R.5     R.7
                 };
             }
         }
@@ -953,25 +751,23 @@ mod test {
                 let mut tree = rb_tree![1];
                 let value = 1;
                 
-                verify!{tree => b-1};
+                verify!{ tree => B.1 };
                 expect!(tree.remove(&value)).to(be_some().value(1));
-                verify!{tree => None};
+                verify!{ tree => None };
             }
             
             it "can remove a node that has two children" {
                 let mut tree = rb_tree![1, 2, 3];
                 verify!{tree =>
-                    b-2
-                        { r-1 },
-                        { r-3 }
+                      < B.2 >
+                    R.1     R.3
                 };
                 
                 let value = 2;
                 expect!(tree.remove(&value)).to(be_some().value(2));
                 verify!{tree =>
-                    b-1
-                        { None },
-                        { r-3 }
+                    B.1 >
+                        R.3
                 };
             }
         }
