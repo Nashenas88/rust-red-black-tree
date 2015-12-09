@@ -117,14 +117,14 @@ impl<T> Node<T> where T: PartialOrd {
                 let mut node = follow_mut!(grandparent, p_dir, n_dir);
                 *node = Some(Box::new(Node::new(value)));
             }
-            match Self::insert_2_g(grandparent, p_dir, n_dir) {
+            match Self::ensure_parent_black(grandparent, p_dir, n_dir) {
                 None | Some(0) => None,
                 Some(rest) => Some(rest - 1),
             }
         } else {
             let dir = get_dir(value < *follow!(grandparent, p_dir, n_dir).value());
             match Self::insert_g(value, grandparent.follow_mut(p_dir), n_dir, dir) {
-                Some(0) => Self::insert_2_g(grandparent, p_dir, n_dir),
+                Some(0) => Self::ensure_parent_black(grandparent, p_dir, n_dir),
                 Some(rest) => Some(rest - 1),
                 None => None,
             }
@@ -148,27 +148,27 @@ impl<T> Node<T> where T: PartialOrd {
     fn insert_n(value: T, node: &mut Link<T>) {
         if node.is_none() {
             *node = Some(Box::new(Node::new(value)));
-            Self::insert_1_n(node);
+            Self::ensure_root_black(node);
         } else {
             let dir = get_dir(value < *node.value());
             if let Some(0) = Self::insert_p(value, node, dir) {
-                Self::insert_1_n(node);
+                Self::ensure_root_black(node);
             }
         }
     }
     
-    fn insert_1_n(node: &mut Link<T>) {
+    fn ensure_root_black(node: &mut Link<T>) {
         node.set_color(Color::Black);
     }
     
-    fn insert_2_g(grandparent: &mut Link<T>, p_dir: Dir, n_dir: Dir) -> Option<usize> {
+    fn ensure_parent_black(grandparent: &mut Link<T>, p_dir: Dir, n_dir: Dir) -> Option<usize> {
         match *grandparent.follow(p_dir).color() {
-            Color::Red => Self::insert_3_g(grandparent, p_dir, n_dir),
+            Color::Red => Self::ensure_balanced_when_uncle_red(grandparent, p_dir, n_dir),
             Color::Black => None,
         }
     }
     
-    fn insert_3_g(grandparent: &mut Link<T>, p_dir: Dir, n_dir: Dir) -> Option<usize> {
+    fn ensure_balanced_when_uncle_red(grandparent: &mut Link<T>, p_dir: Dir, n_dir: Dir) -> Option<usize> {
         let uncle_red = {
             let uncle = grandparent.follow_mut(p_dir.opposite());
             match *uncle {
@@ -188,12 +188,12 @@ impl<T> Node<T> where T: PartialOrd {
             grandparent.set_color(Color::Red);
             Some(2)
         } else {
-            Self::insert_4_g(grandparent, p_dir, n_dir);
+            Self::ensure_balanced_when_uncle_black(grandparent, p_dir, n_dir);
             None
         }
     }
     
-    fn insert_4_g(grandparent: &mut Link<T>, p_dir: Dir, n_dir: Dir) {
+    fn ensure_balanced_when_uncle_black(grandparent: &mut Link<T>, p_dir: Dir, n_dir: Dir) {
         match (p_dir, n_dir) {
             (Dir::Left, Dir::Right) => {
                 Self::rotate_left(grandparent.follow_mut(p_dir));
