@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Paul Faria <Nashenas88@gmail.com>"]
 
 [dependencies]
-stainless = "0.1.*"
+stainless = { git = "https://github.com/reem/stainless" }
 
 [dev-dependencies]
 expectest = "0.4.*"
