@@ -111,22 +111,14 @@ fn get_dir(is_less: bool) -> Dir {
 }
 
 impl<T> Node<T> where T: PartialOrd {
-    fn insert_g(value: T, grandparent: &mut Link<T>, p_dir: Dir, n_dir: Dir) -> Option<usize> {
-        if follow!(grandparent, p_dir, n_dir).is_none() {
-            {
-                let mut node = follow_mut!(grandparent, p_dir, n_dir);
-                *node = Some(Box::new(Node::new(value)));
-            }
-            match Self::ensure_parent_black(grandparent, p_dir, n_dir) {
-                None | Some(0) => None,
-                Some(rest) => Some(rest - 1),
-            }
+    fn insert_n(value: T, node: &mut Link<T>) {
+        if node.is_none() {
+            *node = Some(Box::new(Node::new(value)));
+            Self::ensure_root_black(node);
         } else {
-            let dir = get_dir(value < *follow!(grandparent, p_dir, n_dir).value());
-            match Self::insert_g(value, grandparent.follow_mut(p_dir), n_dir, dir) {
-                Some(0) => Self::ensure_parent_black(grandparent, p_dir, n_dir),
-                Some(rest) => Some(rest - 1),
-                None => None,
+            let dir = get_dir(value < *node.value());
+            if let Some(0) = Self::insert_p(value, node, dir) {
+                Self::ensure_root_black(node);
             }
         }
     }
@@ -145,14 +137,22 @@ impl<T> Node<T> where T: PartialOrd {
         }
     }
     
-    fn insert_n(value: T, node: &mut Link<T>) {
-        if node.is_none() {
-            *node = Some(Box::new(Node::new(value)));
-            Self::ensure_root_black(node);
+    fn insert_g(value: T, grandparent: &mut Link<T>, p_dir: Dir, n_dir: Dir) -> Option<usize> {
+        if follow!(grandparent, p_dir, n_dir).is_none() {
+            {
+                let mut node = follow_mut!(grandparent, p_dir, n_dir);
+                *node = Some(Box::new(Node::new(value)));
+            }
+            match Self::ensure_parent_black(grandparent, p_dir, n_dir) {
+                None | Some(0) => None,
+                Some(rest) => Some(rest - 1),
+            }
         } else {
-            let dir = get_dir(value < *node.value());
-            if let Some(0) = Self::insert_p(value, node, dir) {
-                Self::ensure_root_black(node);
+            let dir = get_dir(value < *follow!(grandparent, p_dir, n_dir).value());
+            match Self::insert_g(value, grandparent.follow_mut(p_dir), n_dir, dir) {
+                Some(0) => Self::ensure_parent_black(grandparent, p_dir, n_dir),
+                Some(rest) => Some(rest - 1),
+                None => None,
             }
         }
     }
@@ -768,6 +768,25 @@ mod unit_tests {
                 verify!{tree =>
                     B.1 >
                         R.3
+                };
+            }
+            
+            it "rebalances when a deep removal is made" {
+                let mut tree = rb_tree_print![1, 2, 3, 4, 5, 6];
+                verify!{ tree =>
+                      < B.2 >
+                    B.1   < R.4 >
+                        B.3     B.5 >
+                                    R.6
+                };
+                
+                let value = 4;
+                expect!(tree.remove(&value)).to(be_some().value(4));
+                verify!{tree =>
+                      < B.2 >
+                    B.1     B.3 >
+                                B.5 >
+                                    R.6
                 };
             }
         }
